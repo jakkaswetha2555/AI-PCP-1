@@ -25,6 +25,40 @@ const AuthContext = createContext<AuthValue | undefined>(undefined);
 const WRONG_DOMAIN_MESSAGE =
   "CollabAI is only open to the VNR VJIET community — please sign in with your college email ending in @vnrvjiet.in.";
 
+/**
+ * Maps a Firebase Auth error code to a message a non-technical user can act
+ * on. Most of these can only happen because of a Firebase Console / Vercel
+ * misconfiguration (not something the user did), so the message says what's
+ * wrong rather than just "try again" — that's the whole point of this map.
+ */
+function messageForAuthError(code: string | undefined): string | null {
+  switch (code) {
+    case "auth/popup-closed-by-user":
+    case "auth/cancelled-popup-request":
+      // The user closed the popup themselves — not an error worth showing.
+      return null;
+    case "auth/unauthorized-domain":
+      return "Sign-in is blocked because this site's domain isn't on the allow-list yet. " +
+        "In the Firebase Console, go to Authentication → Settings → Authorized domains and add this domain.";
+    case "auth/operation-not-allowed":
+      return "Google sign-in isn't turned on for this Firebase project yet. " +
+        "In the Firebase Console, go to Authentication → Sign-in method and enable the Google provider.";
+    case "auth/popup-blocked":
+      return "Your browser blocked the sign-in popup. Allow popups for this site and try again.";
+    case "auth/network-request-failed":
+      return "Network error while signing in. Check your connection and try again.";
+    case "auth/internal-error":
+    case "auth/invalid-api-key":
+    case "auth/api-key-not-valid.-please-pass-a-valid-api-key.":
+      return "Firebase rejected this request (invalid project configuration). " +
+        "Double-check the NEXT_PUBLIC_FIREBASE_* values set for this deployment.";
+    default:
+      return code
+        ? `We couldn't sign you in just now (${code}). Please try again.`
+        : "We couldn't sign you in just now. Please try again.";
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -66,9 +100,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     } catch (err) {
       const code = (err as { code?: string })?.code;
-      if (code !== "auth/popup-closed-by-user" && code !== "auth/cancelled-popup-request") {
-        setError("We couldn't sign you in just now. Please try again.");
-      }
+      // Surfaced in prod too (not just dev) — this is what makes a
+      // misconfigured authorized-domain/provider diagnosable without
+      // needing someone to open devtools on the deployed site.
+      console.error("[CollabAI] Google sign-in failed:", code, err);
+      const message = messageForAuthError(code);
+      if (message) setError(message);
     }
   };
 

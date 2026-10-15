@@ -106,3 +106,25 @@ deliberate simplifications, called out in `firestore.rules` and
 - File/image "attachments" in chat store only the file's name, not its
   bytes (no Firebase Storage upload yet) — wiring that in is a natural next
   step once the rest is running.
+
+## Troubleshooting: Google sign-in works locally but not on Vercel
+
+This almost always means one of two Firebase Console settings is still set
+for `localhost` only and hasn't been updated for your deployed domain:
+
+1. **Authorized domains** (most common cause). Go to **Authentication →
+   Settings → Authorized domains** and add your Vercel domain(s), e.g.
+   `your-project.vercel.app` (and your custom domain, if any). Firebase
+   only allows `signInWithPopup`/`signInWithRedirect` to complete on domains
+   in this list — every other domain gets `auth/unauthorized-domain`.
+2. **Google sign-in method not enabled** on the Firebase project tied to
+   the keys actually deployed on Vercel (easy to miss if you have more than
+   one Firebase project). Check **Authentication → Sign-in method → Google**
+   is enabled, and that the `NEXT_PUBLIC_FIREBASE_*` env vars set in your
+   Vercel project's **Settings → Environment Variables** match that same
+   project (not a different/older Firebase project's keys).
+
+As of this version, a failed sign-in shows the real reason (e.g. "this
+site's domain isn't on the allow-list yet") instead of a generic error, so
+check the message on the sign-in screen first — it names which of the two
+settings above to fix.
