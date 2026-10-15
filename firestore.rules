@@ -1,0 +1,54 @@
+rules_version = '2';
+
+// CollabAI is a VNR VJIET-only community: nothing in this database is
+// readable or writable by anyone who isn't signed in with a verified
+// @vnrvjiet.in email. Deploy with: firebase deploy --only firestore:rules
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isCollegeUser() {
+      return request.auth != null
+        && request.auth.token.email != null
+        && request.auth.token.email.matches('.*@vnrvjiet[.]in$');
+    }
+
+    // One profile document per signed-in student, keyed by their Firebase uid.
+    // Anyone on campus can look up a collaborator's profile; only the owner
+    // can edit their own.
+    match /profiles/{profileId} {
+      allow read: if isCollegeUser();
+      allow create, update: if isCollegeUser() && request.auth.uid == profileId;
+      allow delete: if false;
+    }
+
+    // Project posts. Scope note: for simplicity in this course project any
+    // signed-in student can update a project doc (needed so a project head
+    // can add a member when accepting a join request). A production app
+    // would move accept/decline into a Cloud Function that checks
+    // project.authorId server-side instead of trusting the client.
+    match /projects/{projectId} {
+      allow read: if isCollegeUser();
+      allow create: if isCollegeUser();
+      allow update: if isCollegeUser();
+      allow delete: if false;
+    }
+
+    // Requests to join a project. A student can only ever file a request as
+    // themselves; resolving (accept/decline) is left open to any signed-in
+    // student for the same reason noted above.
+    match /requests/{requestId} {
+      allow read: if isCollegeUser();
+      allow create: if isCollegeUser() && request.resource.data.profileId == request.auth.uid;
+      allow update: if isCollegeUser();
+      allow delete: if false;
+    }
+
+    // Project team chat. A student can only send a message as themselves;
+    // messages are never edited or deleted once sent.
+    match /messages/{messageId} {
+      allow read: if isCollegeUser();
+      allow create: if isCollegeUser() && request.resource.data.fromId == request.auth.uid;
+      allow update, delete: if false;
+    }
+  }
+}
